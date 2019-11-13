@@ -33,7 +33,7 @@ var Run = cli.Command{
 			return err
 		}
 
-		conn, err := pgx.Connect(context.Background(), "postgres://test:@localhost:5432/wallet")
+		conn, err := pgx.Connect(context.Background(), cfg.PostgresURL)
 
 		if err != nil {
 			return err
