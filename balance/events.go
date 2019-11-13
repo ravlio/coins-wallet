@@ -1,37 +1,35 @@
 package balance
 
-import (
-	"github.com/google/uuid"
-	eh "github.com/looplab/eventhorizon"
-	"github.com/ravlio/wallet/pkg/money"
-)
+import "github.com/ravlio/wallet/pkg/money"
 
-const (
-	CreditedEvent     eh.EventType = "balance:credited"
-	DebitedEvent      eh.EventType = "balance:debited"
-	CreditFailedEvent eh.EventType = "balance:creditFailed"
-	DebitFailedEvent  eh.EventType = "balance:debitFailed"
-)
-
-type CommonData struct {
-	AccountID uuid.UUID
+type Event struct {
+	AccountID uint32
 	Currency  money.Currency
 	Amount    money.Money
 }
-type CreditedData struct {
-	CommonData
+
+type DebitEvent struct {
+	Event
 }
 
-type DebitedData struct {
-	CommonData
+type DebitedEvent struct {
+	Event
 }
 
-type CreditFailedData struct {
-	CommonData
+type DebitFailEvent struct {
+	Event
 	Error error
 }
 
-type DebitFailedData struct {
-	CommonData
+type CreditEvent struct {
+	Event
+}
+
+type CreditedEvent struct {
+	Event
+}
+
+type CreditFailedEvent struct {
+	Event
 	Error error
 }

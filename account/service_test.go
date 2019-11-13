@@ -2,57 +2,116 @@ package account_test
 
 import (
 	"context"
-	"log"
+	"errors"
 	"testing"
-	"time"
 
-	"github.com/google/uuid"
-	eh "github.com/looplab/eventhorizon"
-	"github.com/looplab/eventhorizon/commandhandler/bus"
-	eventbus "github.com/looplab/eventhorizon/eventbus/local"
-	eventstore "github.com/looplab/eventhorizon/eventstore/memory"
-	repo "github.com/looplab/eventhorizon/repo/memory"
+	"github.com/jackc/pgx/v4"
 	"github.com/ravlio/wallet/account"
+	"github.com/ravlio/wallet/pkg/errutil"
 	"github.com/stretchr/testify/require"
 )
 
 func TestService(t *testing.T) {
-	store := eventstore.NewEventStore()
+	conn, err := pgx.Connect(context.Background(), "postgres://test:@localhost:5432/wallet")
+	require.NoError(t, err)
 
-	// Create the event bus that distributes events.
-	eventBus := eventbus.NewEventBus(nil)
-	go func() {
-		for e := range eventBus.Errors() {
-			log.Printf("eventbus: %s", e.Error())
+	_, err = conn.Exec(context.Background(), `TRUNCATE accounts`)
+	require.NoError(t, err)
+
+	repo := account.NewRepository(conn)
+
+	svc := account.NewService(repo)
+
+	var id1, id2 uint32
+	var list []*account.Account
+
+	t.Run("Non-existing account getting should error", func(t *testing.T) {
+		_, err := svc.GetAccount(context.Background(), 1)
+		require.Error(t, err)
+		require.True(t, errors.Is(err, errutil.ErrNotFound))
+	})
+
+	t.Run("Non-existing account updating should error", func(t *testing.T) {
+		acc := &account.Account{ID: 1}
+		_, err := svc.UpdateAccount(context.Background(), acc)
+		require.Error(t, err)
+		require.True(t, errors.Is(err, errutil.ErrNotFound))
+	})
+
+	t.Run("Non-existing account deleting should error", func(t *testing.T) {
+		err := svc.DeleteAccount(context.Background(), 1)
+		require.Error(t, err)
+		require.True(t, errors.Is(err, errutil.ErrNotFound))
+	})
+
+	t.Run("Create account 1", func(t *testing.T) {
+		acc := &account.Account{
+			ID:    123, // should be ignored
+			Name:  "acc1",
+			Email: "acc1@gmail.com",
 		}
-	}()
+		ret, err := svc.CreateAccount(context.Background(), acc)
+		require.NoError(t, err)
+		require.True(t, ret.ID > 0)
+		require.Equal(t, acc.Name, ret.Name)
+		require.Equal(t, acc.Email, ret.Email)
 
-	// Add a logger as an observer.
+		id1 = ret.ID
 
-	svc, err := account.NewService(store, eventBus, bus.NewCommandHandler(), repo.NewRepo())
-	require.NoError(t, err)
+		list = append(list, ret)
+	})
 
-	id1 := uuid.New()
-	err = svc.CreateAccount(context.Background(), &account.CreateAccountRequest{ID: id1, Name: "account1", Email: "account1@gmail.com"})
-	require.NoError(t, err)
+	t.Run("Create account 2", func(t *testing.T) {
+		acc := &account.Account{
+			ID:    123, // should be ignored
+			Name:  "acc2",
+			Email: "acc2@gmail.com",
+		}
+		ret, err := svc.CreateAccount(context.Background(), acc)
+		require.NoError(t, err)
+		require.True(t, ret.ID > 0)
+		require.Equal(t, acc.Name, ret.Name)
+		require.Equal(t, acc.Email, ret.Email)
 
-	id2 := uuid.New()
-	err = svc.CreateAccount(context.Background(), &account.CreateAccountRequest{ID: id2, Name: "account2", Email: "account2@gmail.com"})
-	require.NoError(t, err)
+		id2 = ret.ID
+		list = append(list, ret)
+	})
 
-	notdound := uuid.New()
-	_, err = svc.GetAccount(context.Background(), notdound)
-	require.EqualError(t, err, eh.ErrEntityNotFound.Error())
+	t.Run("List should return 2 accounts", func(t *testing.T) {
+		ret, err := svc.ListAccounts(context.Background())
+		require.NoError(t, err)
+		require.Equal(t, list, ret)
+	})
 
-	time.Sleep(time.Millisecond)
+	t.Run("Update account 1", func(t *testing.T) {
+		req := &account.Account{
+			ID:    id1,
+			Name:  "newname",
+			Email: "newemail@gmail.com",
+		}
+		resp, err := svc.UpdateAccount(context.Background(), req)
 
-	acc, err := svc.GetAccount(context.Background(), id1)
-	require.NoError(t, err)
+		require.NoError(t, err)
 
-	require.Equal(t, &account.Account{ID: id1, Name: "account1", Email: "account1@gmail.com", Version: 1}, acc)
+		require.Equal(t, req, resp)
+	})
 
-	acc, err = svc.GetAccount(context.Background(), id2)
-	require.NoError(t, err)
+	t.Run("Delete account 2", func(t *testing.T) {
+		err := svc.DeleteAccount(context.Background(), id2)
 
-	require.Equal(t, &account.Account{ID: id2, Name: "account2", Email: "account2@gmail.com", Version: 1}, acc)
+		require.NoError(t, err)
+	})
+
+	t.Run("List should return 1 account", func(t *testing.T) {
+		ret, err := svc.ListAccounts(context.Background())
+
+		eq := []*account.Account{{
+			ID:    id1,
+			Name:  "newname",
+			Email: "newemail@gmail.com",
+		}}
+
+		require.NoError(t, err)
+		require.Equal(t, eq, ret)
+	})
 }

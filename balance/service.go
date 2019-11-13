@@ -3,155 +3,195 @@ package balance
 import (
 	"context"
 	"errors"
-	"fmt"
+	"time"
 
-	"github.com/google/uuid"
-	eh "github.com/looplab/eventhorizon"
-	"github.com/looplab/eventhorizon/aggregatestore/events"
-	"github.com/looplab/eventhorizon/commandhandler/aggregate"
-	"github.com/looplab/eventhorizon/commandhandler/bus"
-	"github.com/looplab/eventhorizon/eventhandler/projector"
-	"github.com/ravlio/wallet/pkg/middleware"
+	"github.com/ravlio/wallet/account"
+	"github.com/ravlio/wallet/pkg/db"
+	eb "github.com/ravlio/wallet/pkg/event_bus"
 	"github.com/ravlio/wallet/pkg/money"
+	"github.com/ravlio/wallet/types"
 )
 
+type Balance struct {
+	AccountID uint32
+	Currency  money.Currency
+	Balance   money.Money
+	CreatedAt *time.Time
+}
+
 type Client interface {
-	Credit(ctx context.Context, req *Credit) error
-	Debit(ctx context.Context, req *Debit) error
-	GetBalance(ctx context.Context, account string, currency money.Currency) (*Balance, error)
-	ListBalances(ctx context.Context, account string) ([]*Balance, error)
+	Credit(ctx context.Context, accountID uint32, currency money.Currency, amount money.Money) error
+	Debit(ctx context.Context, accountID uint32, currency money.Currency, amount money.Money) error
+	GetBalance(ctx context.Context, accountID uint32, currency money.Currency) (*Balance, error)
+	ListBalances(ctx context.Context, accountID uint32) ([]*Balance, error)
 }
 
 type Service struct {
-	commandHandler eh.CommandHandler
-	repo           eh.ReadRepo
+	repo      Repository
+	eb        eb.Broker
+	accountCl account.Client
+	subs      []eb.Subscription
 }
 
-func NewService(eventStore eh.EventStore,
-	eventBus eh.EventBus,
-	commandBus *bus.CommandHandler,
-	repo eh.ReadWriteRepo) (*Service, error) {
-
-	svc := &Service{repo: repo}
-
-	eventBus.AddObserver(eh.MatchAny(), &middleware.Logger{})
-
-	aggregateStore, err := events.NewAggregateStore(eventStore, eventBus)
+func NewService(repo Repository, account account.Client, eb eb.Broker) (*Service, error) {
+	svc := &Service{repo: repo, eb: eb, accountCl: account}
+	err := svc.subscribe()
 	if err != nil {
-		return nil, fmt.Errorf("could not create aggregate store: %w", err)
+		return nil, err
 	}
-
-	handler, err := aggregate.NewCommandHandler(AggregateType, aggregateStore)
-	if err != nil {
-		return nil, fmt.Errorf("could not create command commandHandler: %w", err)
-	}
-
-	svc.commandHandler = eh.UseCommandHandlerMiddleware(handler, middleware.LoggingMiddleware)
-	err = commandBus.SetHandler(svc.commandHandler, CreditCommand)
-	if err != nil {
-		return nil, fmt.Errorf("could not set command commandHandler for command %s: %w", CreditCommand, err)
-	}
-	err = commandBus.SetHandler(svc.commandHandler, DebitCommand)
-	if err != nil {
-		return nil, fmt.Errorf("could not set command commandHandler for command %s: %w", DebitCommand, err)
-	}
-
-	proj := projector.NewEventHandler(
-		NewProjector(), repo)
-	proj.SetEntityFactory(func() eh.Entity { return &Balance{} })
-	eventBus.AddHandler(eh.MatchAnyEventOf(
-		CreditedEvent,
-		DebitedEvent,
-	), proj)
-
-	eh.RegisterCommand(func() eh.Command { return &Credit{} })
-	eh.RegisterCommand(func() eh.Command { return &Debit{} })
-
-	eh.RegisterAggregate(func(id uuid.UUID) eh.Aggregate {
-		return NewAggregate(id)
-	})
-
-	eh.RegisterEventData(CreditedEvent, func() eh.EventData {
-		return &CreditedData{}
-	})
-
-	eh.RegisterEventData(CreditFailedEvent, func() eh.EventData {
-		return &CreditFailedData{}
-	})
-
-	eh.RegisterEventData(DebitedEvent, func() eh.EventData {
-		return &DebitedData{}
-	})
-
-	eh.RegisterEventData(DebitFailedEvent, func() eh.EventData {
-		return &DebitFailedData{}
-	})
 
 	return svc, nil
 }
 
-func (s *Service) Credit(ctx context.Context, req *Credit) error {
-	cmd, err := eh.CreateCommand(CreditCommand)
-	if err != nil {
-		return fmt.Errorf("create command error: %w", err)
+func (s *Service) Credit(ctx context.Context, accountID uint32, currency money.Currency, amount money.Money) error {
+	if err := s.validateCredit(ctx, accountID, currency, amount); err != nil {
+		return err
 	}
 
-	ccmd, ok := cmd.(*Credit)
-	if !ok {
-		return fmt.Errorf("error command typecast")
+	return s.repo.Credit(ctx, accountID, currency, amount)
+}
+
+func (s *Service) Debit(ctx context.Context, accountID uint32, currency money.Currency, amount money.Money) error {
+	if err := s.validateDebit(ctx, accountID, currency, amount); err != nil {
+		return err
 	}
 
-	ccmd.ID = req.ID
-	ccmd.AccountID = req.AccountID
-	ccmd.Currency = req.Currency
-	ccmd.Amount = req.Amount
+	return s.repo.Debit(ctx, accountID, currency, amount)
+}
 
-	err = s.commandHandler.HandleCommand(ctx, ccmd)
+func (s *Service) GetBalance(ctx context.Context, accountID uint32, currency money.Currency) (*Balance, error) {
+	if err := s.validateCommon(ctx, accountID, currency); err != nil {
+		return nil, err
+	}
+
+	return s.repo.GetBalance(ctx, accountID, currency)
+}
+
+func (s *Service) ListBalances(ctx context.Context, accountID uint32) ([]*Balance, error) {
+	return s.repo.ListBalances(ctx, accountID)
+}
+
+func (s *Service) subscribe() error {
+	var sub1, sub2 eb.Subscription
+	var err error
+
+	sub1, err = s.eb.Subscribe(types.BalanceCreditEvent, s.handleBalanceCreditEvent)
+
 	if err != nil {
 		return err
 	}
 
-	return nil
-}
+	s.subs = append(s.subs, sub1)
 
-func (s *Service) Debit(ctx context.Context, req *Credit) error {
-	cmd, err := eh.CreateCommand(DebitCommand)
-	if err != nil {
-		return fmt.Errorf("create command error: %w", err)
-	}
+	sub2, err = s.eb.Subscribe(types.BalanceDebitEvent, s.handleBalanceDebitEvent)
 
-	ccmd, ok := cmd.(*Debit)
-	if !ok {
-		return fmt.Errorf("error command typecast")
-	}
-
-	ccmd.ID = req.ID
-	ccmd.AccountID = req.AccountID
-	ccmd.Currency = req.Currency
-	ccmd.Amount = req.Amount
-
-	err = s.commandHandler.HandleCommand(ctx, ccmd)
 	if err != nil {
 		return err
 	}
 
+	s.subs = append(s.subs, sub2)
+
 	return nil
 }
 
+func (s *Service) handleBalanceCreditEvent(msg *eb.Message) {
+	ctx := context.Background()
 
-func (s *Service) GetBalance(ctx context.Context, account string, currency money.Currency) (*Balance, error) {
-	var (
-		data interface{}
-		err  error
-	)
+	ev := msg.Payload.(*CreditEvent)
 
-	if data, err = s.repo.Find(ctx, id); err != nil {
-		if rrErr, ok := err.(eh.RepoError); ok && rrErr.Err == eh.ErrEntityNotFound {
-			return nil, eh.ErrEntityNotFound
+	if err := s.validateCredit(ctx, ev.AccountID, ev.Currency, ev.Amount); err != nil {
+		_ = s.eb.Publish(types.BalanceCreditFailEvent, nil, msg.Metadata)
+		return
+	}
+
+	tx, err := s.repo.CreditTx(ctx, ev.AccountID, ev.Currency, ev.Amount)
+	if err != nil {
+		_ = s.eb.Publish(types.BalanceCreditFailEvent, nil, msg.Metadata)
+		return
+	}
+
+	err = s.handleSaga(ctx, tx, msg)
+	if err != nil {
+		// TODO: ugly
+		if err.Error() != "transfer fail" {
+			_ = s.eb.Publish(types.BalanceCreditFailEvent, nil, msg.Metadata)
 		}
+	}
+}
 
-		return nil, errors.New("unexpected error")
+func (s *Service) handleBalanceDebitEvent(msg *eb.Message) {
+	ctx := context.Background()
+
+	ev := msg.Payload.(*DebitEvent)
+
+	if err := s.validateDebit(ctx, ev.AccountID, ev.Currency, ev.Amount); err != nil {
+		_ = s.eb.Publish(types.BalanceDebitFailEvent, nil, msg.Metadata)
+		return
 	}
 
-	return data.(*Balance), nil
+	tx, err := s.repo.CreditTx(ctx, ev.AccountID, ev.Currency, ev.Amount)
+	if err != nil {
+		_ = s.eb.Publish(types.BalanceDebitFailEvent, nil, msg.Metadata)
+		return
+	}
+
+	err = s.handleSaga(ctx, tx, msg)
+
+	if err != nil {
+		// TODO: ugly
+		if err.Error() != "transfer fail" {
+			_ = s.eb.Publish(types.BalanceDebitFailEvent, nil, msg.Metadata)
+		}
+	}
+}
+
+func (s *Service) handleSaga(ctx context.Context, tx db.Tx, msg *eb.Message) error {
+	var err error
+
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback(ctx)
+		}
+	}()
+
+	// blocking channel for sequences
+	ch := make(chan error)
+
+	// timeout mechanism
+	timeout := time.NewTimer(time.Second / 2)
+	go func() {
+		<-timeout.C
+		timeout.Stop()
+		ch <- errors.New("tx timeout")
+	}()
+
+	sub1, _ := s.eb.Subscribe(types.TransferSuccessEvent, func(m *eb.Message) {
+		if m.Metadata["tx"] == msg.Metadata["tx"] {
+			ch <- nil
+		}
+	})
+
+	defer sub1.Unsubscribe()
+
+	sub2, _ := s.eb.Subscribe(types.TransferFailEvent, func(m *eb.Message) {
+		if m.Metadata["tx"] == msg.Metadata["tx"] {
+			ch <- errors.New("transfer fail")
+		}
+	})
+
+	defer sub2.Unsubscribe()
+
+	err = <-ch
+
+	if err != nil {
+		return err
+	}
+
+	err = tx.Commit(ctx)
+
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
