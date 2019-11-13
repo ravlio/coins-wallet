@@ -52,3 +52,11 @@ func (s *Service) UpdateAccount(ctx context.Context, req *Account) (*Account, er
 func (s *Service) ListAccounts(ctx context.Context) ([]*Account, error) {
 	return s.repo.ListAccounts(ctx)
 }
+
+func (s *Service) Start() error {
+	return nil
+}
+
+func (s *Service) Stop() error {
+	return nil
+}

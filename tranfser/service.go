@@ -47,11 +47,12 @@ func NewService(repo Repository, eb eb.Broker) *Service {
 
 /*
 transfer money with distributed transaction via saga
-1. send credit event
-2. wait for response
-3. send debit event
-4. wait for response
-5. send success transaction event
+1. generate transaction id
+2. send credit event
+3. wait for response
+4. send debit event
+5. wait for response
+6. send success transaction event
 */
 
 func (s *Service) Transfer(ctx context.Context, fromID, toID uint32,
