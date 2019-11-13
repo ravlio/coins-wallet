@@ -94,6 +94,14 @@ func (s *Service) subscribe() error {
 	return nil
 }
 
+func (s *Service) Start() error {
+	return nil
+}
+
+func (s *Service) Stop() error {
+	return nil
+}
+
 func (s *Service) handleBalanceCreditEvent(msg *eb.Message) {
 	ctx := context.Background()
 

@@ -1,0 +1,2 @@
+postgresUrl: "postgres://test:@localhost:5432/wallet"
+metricsPort: 9000

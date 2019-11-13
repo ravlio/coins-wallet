@@ -189,3 +189,11 @@ func (s *Service) Transfer(ctx context.Context, fromID, toID uint32,
 func (s *Service) ListTransfers(ctx context.Context) ([]*Transfer, error) {
 	return s.repo.ListTransfers(ctx)
 }
+
+func (s *Service) Start() error {
+	return nil
+}
+
+func (s *Service) Stop() error {
+	return nil
+}
