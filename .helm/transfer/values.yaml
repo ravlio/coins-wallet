@@ -1,0 +1,9 @@
+name: transfer
+
+image:
+  repository: gcr.io/coins.ph/transfer
+  tag: master
+
+httpPort: 80
+healthcheckPort: 88
+metricsPort: 9402

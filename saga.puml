@@ -1,0 +1,39 @@
+@startuml
+activate Transfer
+Transfer -> EventBus: BalanceCreditEvent
+EventBus -> Balance: BalanceCreditEvent
+activate Balance
+Balance -> Account: check for fromID existence
+Balance -> Account: check for toID existence
+Balance -> Balance: debit fromID
+Balance -> Balance: credit toID
+
+group Credit failure
+Balance -> EventBus: CreditFailEvent
+deactivate Balance
+EventBus -> Transfer: CreditFailEvent
+Transfer -> EventBus: TransactionFailEvent
+EventBus -> Balance: TransactionFailEvent
+deactivate Transfer
+activate Balance
+Balance -> Balance: Rollback
+deactivate Balance
+end
+
+activate Transfer
+group Success
+activate Balance
+Balance -> EventBus: CreditedEvent
+Balance -> EventBus: DebitedEvent
+deactivate Balance
+EventBus -> Transfer: CreditedEvent
+EventBus -> Transfer: DebitedEvent
+Transfer -> Transfer: Commit
+Transfer -> EventBus: TransactionSuccessEvent
+EventBus -> Balance: TransactionSuccessEvent
+activate Balance
+Balance -> Balance: Commit
+deactivate Balance
+end
+
+@enduml

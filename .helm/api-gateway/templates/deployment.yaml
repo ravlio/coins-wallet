@@ -1,0 +1,61 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ .Values.name }}
+  labels:
+    app: {{ .Values.name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    release: {{ .Release.Name | quote }}
+    heritage: {{ .Release.Service | quote }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Values.name }}
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.name }}
+        release: {{ .Release.Name }}
+      annotations:
+        release: {{ .Release.Revision | quote }}
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "{{ .Values.metricsPort }}"
+        prometheus.io/scrape: "true"
+    spec:
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: {{ .Values.httpPort }}
+            - name: metrics
+              containerPort: {{ .Values.metricsPort }}
+          livenessProbe:
+              initialDelaySeconds: 15
+              periodSeconds: 60
+              timeoutSeconds: 10
+              failureThreshold: 5
+              httpGet:
+                path: /live
+                port: {{ .Values.healthcheckPort }}
+          readinessProbe:
+              initialDelaySeconds: 15
+              periodSeconds: 60
+              timeoutSeconds: 10
+              failureThreshold: 5
+              httpGet:
+                path: /ready
+                port: {{ .Values.healthcheckPort }}
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          command: ["/app","run","--config","config.yaml"]

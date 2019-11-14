@@ -1,0 +1,120 @@
+version: '2.1'
+
+networks:
+  monitor-net:
+    driver: bridge
+
+volumes:
+  socket: {}
+  kafka_data: {}
+  zk_data: {}
+  zk_datalog: {}
+  prometheus_data: {}
+  grafana_data: {}
+
+services:
+  web:
+    image: nginx
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf
+
+  api-gateway:
+    build:
+      context: ../api-gateway
+    command: bash -c "run --config config.yml"
+
+  account:
+    build:
+      context: ../account
+    command: bash -c "migrate up --config config.yml && run --config config.yml"
+
+  balance1:
+    build:
+      context: ../balance
+    command: bash -c "migrate up --config config.yml && run --config config.yml"
+
+  balance2:
+    build:
+      context: ../balance
+    command: bash -c "migrate up --config config.yml && run --config config.yml"
+
+  transfer1:
+    build:
+      context: ../tranfser
+    command: bash -c "migrate up --config config.yml && run --config config.yml"
+
+  transfer2:
+    build:
+      context: ../tranfser
+    command: bash -c "migrate up --config config.yml && run --config config.yml"
+
+  zoo:
+    image: zookeeper:3.4.9
+    hostname: zoo
+    ports:
+      - "2181:2181"
+    environment:
+      ZOO_MY_ID: 1
+      ZOO_PORT: 2181
+      ZOO_SERVERS: server.1=zoo:2888:3888
+    volumes:
+      - zk_data:/data
+      - zk_datalog:/datalog
+
+  kafka:
+    image: confluentinc/cp-enterprise-kafka:5.3.0
+    hostname: kafka
+    expose:
+      - 9092
+    environment:
+      KAFKA_ADVERTISED_LISTENERS: LISTENER_DOCKER_INTERNAL://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: LISTENER_DOCKER_INTERNAL:PLAINTEXT,LISTENER_DOCKER_EXTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: LISTENER_DOCKER_INTERNAL
+      KAFKA_ZOOKEEPER_CONNECT: "zoo:2181"
+      KAFKA_BROKER_ID: 1
+      KAFKA_LOG4J_LOGGERS: "kafka.controller=INFO,kafka.producer.async.DefaultEventHandler=INFO,state.change.logger=INFO"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    depends_on:
+      - zoo
+
+  prometheus:
+    image: prom/prometheus:v2.11.1
+    container_name: prometheus
+    volumes:
+      - ./prometheus/:/etc/prometheus/
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    restart: unless-stopped
+    ports:
+      - 9090:9090
+    labels:
+      org.label-schema.group: "monitoring"
+
+  grafana:
+    image: grafana/grafana:6.2.5
+    container_name: grafana
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/datasources:/etc/grafana/datasources
+      - ./grafana/dashboards:/etc/grafana/dashboards
+      - ./grafana/setup.sh:/setup.sh
+    entrypoint: /setup.sh
+    environment:
+      - GF_SECURITY_ADMIN_USER=${ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    restart: unless-stopped
+    ports:
+      - 3000:3000
+    labels:
+      org.label-schema.group: "monitoring"

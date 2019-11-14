@@ -1,0 +1,9 @@
+name: account
+
+image:
+  repository: gcr.io/coins.ph/balance
+  tag: master
+
+httpPort: 80
+healthcheckPort: 88
+metricsPort: 9402

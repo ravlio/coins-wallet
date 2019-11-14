@@ -1,0 +1,11 @@
+replicaCount: 2
+
+resources:
+  limits:
+    cpu: 2
+    memory: 500Mi
+  requests:
+    cpu: 1
+    memory: 100Mi
+
+httpPort: 80

@@ -19,7 +19,7 @@ var Run = cli.Command{
 		cli.StringFlag{
 			Name:  "config, c",
 			Usage: "Configuration file",
-			Value: "config.yml",
+			Value: "config.yaml",
 		}},
 	Action: func(c *cli.Context) error {
 		cfg := &tranfser.Config{}

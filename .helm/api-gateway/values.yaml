@@ -1,0 +1,9 @@
+name: api-gateway
+
+image:
+  repository: gcr.io/coins.ph/api-gateway
+  tag: master
+
+httpPort: 80
+healthcheckPort: 88
+metricsPort: 9402
