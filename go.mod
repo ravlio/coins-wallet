@@ -9,11 +9,15 @@ require (
 	github.com/asaskevich/govalidator v0.0.0-20190424111038-f61b66f89f4a // indirect
 	github.com/go-kit/kit v0.9.0
 	github.com/go-ozzo/ozzo-validation v3.6.0+incompatible
+	github.com/gogo/protobuf v1.3.1
+	github.com/golang/protobuf v1.3.2
 	github.com/google/uuid v1.1.0
 	github.com/gorilla/mux v1.7.3
 	github.com/hashicorp/consul/api v1.3.0
 	github.com/jackc/pgtype v1.0.2
 	github.com/jackc/pgx/v4 v4.1.2
+	github.com/mailru/easyjson v0.7.0
+	github.com/naoina/denco v0.0.0-20180930074809-8475105a6b4c
 	github.com/opentracing/opentracing-go v1.1.0
 	github.com/openzipkin/zipkin-go v0.2.2
 	github.com/pkg/errors v0.8.1
@@ -24,7 +28,7 @@ require (
 	github.com/sony/gobreaker v0.4.1 // indirect
 	github.com/streadway/handy v0.0.0-20190108123426-d5acb3125c2a // indirect
 	github.com/stretchr/testify v1.4.0
-	go.uber.org/zap v1.10.0
+	github.com/valyala/fasthttp v1.6.0
 	golang.org/x/time v0.0.0-20191024005414-555d28b269f0 // indirect
 	google.golang.org/genproto v0.0.0-20180831171423-11092d34479b // indirect
 	google.golang.org/grpc v1.20.0

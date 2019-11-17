@@ -1,0 +1,15 @@
+syntax = "proto3";
+package pb;
+
+import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+import "messages.proto";
+import "google/protobuf/empty.proto";
+import "google/protobuf/wrappers.proto";
+
+service AccountService {
+    rpc CreateAccount(Account) returns (Account) {};
+    rpc GetAccount(google.protobuf.UInt32Value) returns (Account) {};
+    rpc DeleteAccount(google.protobuf.UInt32Value) returns (google.protobuf.Empty) {};
+    rpc UpdateAccount(Account) returns (Account) {};
+    rpc ListAccount(google.protobuf.Empty) returns (stream Account) {};
+}

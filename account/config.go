@@ -2,6 +2,7 @@ package account
 
 type Config struct {
 	PostgresURL string `yaml:"postgresUrl"`
+	GRPCPort    int    `yaml:"grpcPort"`
 	Kafka       struct {
 		GroupID         string   `yaml:"groupId"`
 		Topic           string   `yaml:"topic"`

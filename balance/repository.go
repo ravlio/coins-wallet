@@ -43,7 +43,7 @@ func (p *PostgresRepository) CreditTx(ctx context.Context, accountID uint32, cur
 		return nil, err
 	}
 
-	return db.NewPgxTx(tx), nil
+	return db.NewTx(tx), nil
 }
 
 func (p *PostgresRepository) credit(ctx context.Context, accountID uint32, currency money.Currency, amount money.Money) (tx pgx.Tx, err error) {
@@ -86,7 +86,7 @@ func (p *PostgresRepository) DebitTx(ctx context.Context, accountID uint32, curr
 		return nil, err
 	}
 
-	return db.NewPgxTx(tx), nil
+	return db.NewTx(tx), nil
 }
 
 func (p *PostgresRepository) debit(ctx context.Context, accountID uint32, currency money.Currency, amount money.Money) (tx pgx.Tx, err error) {

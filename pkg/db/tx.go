@@ -15,7 +15,7 @@ type PgxTx struct {
 	tx pgx.Tx
 }
 
-func NewPgxTx(tx pgx.Tx) Tx {
+func NewTx(tx pgx.Tx) Tx {
 	return &PgxTx{tx: tx}
 }
 

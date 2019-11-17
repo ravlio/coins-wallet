@@ -7,11 +7,31 @@ import (
 
 var ErrNotFound = errors.New("not found")
 
+type Error interface {
+	Error() string
+	GetCode() int
+}
+
 type GeneralError struct {
 	Err    error
 	Status int
 	Msg    string
 	Field  string
+}
+
+func NewFromCode(s int, msg string) Error {
+	return &GeneralError{Msg: msg, Status: s}
+}
+
+func (e *GeneralError) Error() string {
+	if e.Err != nil {
+		return e.Err.Error()
+	}
+	return e.Msg
+}
+
+func (e *GeneralError) GetCode() int {
+	return e.Status
 }
 
 type NotFoundError struct {
@@ -27,6 +47,10 @@ func (e *NotFoundError) Error() string {
 		return e.Err.Error()
 	}
 	return "not found"
+}
+
+func (e *NotFoundError) GetCode() int {
+	return e.Status
 }
 
 type InternalServerError struct {

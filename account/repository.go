@@ -33,6 +33,7 @@ func (p *PostgresRepository) GetAccountByID(ctx context.Context, id uint32) (*Ac
 	if err != nil {
 		return nil, err
 	}
+
 	return m.ToEntity(), nil
 }
 

@@ -2,7 +2,12 @@ package account
 
 import (
 	"context"
+	"fmt"
+	"net"
 	"time"
+
+	"github.com/rs/zerolog/log"
+	"google.golang.org/grpc"
 )
 
 type Account struct {
@@ -22,9 +27,13 @@ type Client interface {
 
 type Service struct {
 	repo Repository
+	cfg  *Config
+	grpc *grpc.Server
 }
 
-func NewService(repo Repository) *Service {
+var _ Client = &Service{}
+
+func NewService(cfg *Config, repo Repository) *Service {
 	return &Service{repo: repo}
 }
 
@@ -57,9 +66,26 @@ func (s *Service) ListAccounts(ctx context.Context) ([]*Account, error) {
 }
 
 func (s *Service) Start() error {
+	srv := NewGRPCServer(s)
+
+	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", s.cfg.GRPCPort))
+	if err != nil {
+		return err
+	}
+
+	go func() {
+		err := srv.Serve(ln)
+
+		if err != nil {
+			log.Fatal().Err(err).Msg("can't start grpc server")
+		}
+	}()
+
 	return nil
 }
 
 func (s *Service) Stop() error {
+	s.grpc.Stop()
+
 	return nil
 }
