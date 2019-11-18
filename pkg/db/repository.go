@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/jackc/pgx/v4"
@@ -93,7 +94,7 @@ func (r *PGRepository) InsertReturning(ctx context.Context, writeModel, readMode
 
 	placeholders := make([]string, 0, len(finalWriteCols))
 	for k := range finalWriteCols {
-		placeholders = append(placeholders, fmt.Sprintf("$%d", k+1))
+		placeholders = append(placeholders, "$"+strconv.Itoa(k+1))
 	}
 
 	query := fmt.Sprintf(
@@ -141,7 +142,7 @@ func (r *PGRepository) UpdateReturning(ctx context.Context, writeModel, readMode
 
 	sets := make([]string, 0, len(finalWriteCols))
 	for k, v := range finalWriteCols {
-		sets = append(sets, fmt.Sprintf("%s = $%d", v, k+1))
+		sets = append(sets, v+"=$"+strconv.Itoa(k+1))
 	}
 
 	query := fmt.Sprintf(

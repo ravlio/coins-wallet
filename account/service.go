@@ -2,8 +2,8 @@ package account
 
 import (
 	"context"
-	"fmt"
 	"net"
+	"strconv"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -68,7 +68,7 @@ func (s *Service) ListAccounts(ctx context.Context) ([]*Account, error) {
 func (s *Service) Start() error {
 	srv := NewGRPCServer(s)
 
-	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", s.cfg.GRPCPort))
+	ln, err := net.Listen("tcp", ":"+strconv.Itoa(s.cfg.GRPCPort))
 	if err != nil {
 		return err
 	}
